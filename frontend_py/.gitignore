@@ -1,0 +1,46 @@
+# Ambiente virtual do Python (venv)
+venv/
+.venv/
+
+# Arquivos de cache e bytecode do Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Configurações de IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Arquivos de ambiente e variáveis sensíveis
+.env
+.env.local
+.secrets
+
+# Arquivos de build e distribuição
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Logs e bancos de dados locais
+*.log
+*.sqlite
+*.sqlite3
+
+# Resultados de testes e coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Arquivos temporários do sistema
+.DS_Store  # macOS
+Thumbs.db  # Windows
+
+
+data/processed/
+data/raw/
+data/tiles/images/
+data/tiles/masks/
+images/

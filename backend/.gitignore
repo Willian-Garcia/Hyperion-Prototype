@@ -1,0 +1,17 @@
+*.pyc
+__pycache__/
+**/__pycache__/
+
+# Ambiente virtual do Python (venv)
+venv/
+.venv/
+
+# Ignorar arquivos mas manter as pastas
+data/processed/*
+!data/processed/.gitkeep
+
+data/raw/*
+!data/raw/.gitkeep
+
+output/*
+!output/.gitkeep
