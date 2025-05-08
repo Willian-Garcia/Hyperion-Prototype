@@ -16,3 +16,4 @@ requests
 Pillow
 torch
 segmentation-models-pytorch
+pyproj

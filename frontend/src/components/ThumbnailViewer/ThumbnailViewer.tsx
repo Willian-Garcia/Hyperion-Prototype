@@ -49,13 +49,12 @@ const ScrollContainer = styled.div`
   align-items: center;
 `;
 
-const ThumbnailCard = styled.div`
+const ThumbnailCard = styled.div<{ selected: boolean }>`
   width: 100%;
   background-color: #d9d9d9;
   border-radius: 12px;
   padding: 1rem;
-  align-content: center;
-  justify-content: center;
+  border: ${({ selected }) => (selected ? "3px solid #fe5000" : "none")};
 `;
 
 const ThumbnailImage = styled.img`
@@ -114,7 +113,8 @@ interface ThumbnailViewerProps {
 }
 
 export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerProps) {
-  const { setImagemSelecionada, setMostrarImagem } = useBBox();
+  const { setImagemSelecionada, setMostrarImagem, imagemSelecionada } = useBBox();
+
 
   const formatarData = (dataISO?: string) => {
     if (!dataISO) return "";
@@ -134,7 +134,6 @@ export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerPro
         bbox: img.bbox,
       });
       setMostrarImagem(true); // <- garante que a imagem será visível
-      onClose();
     } else {
       alert("Imagem sem BBOX disponível para visualização.");
     }
@@ -144,17 +143,26 @@ export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerPro
     <Panel>
       <ScrollContainer>
         <Title>Resultados da Busca</Title>
-        {imagens.map((img) => (
-          <ThumbnailCard key={img.id}>
-            <ThumbnailImage src={img.thumbnail} alt={img.id} />
-            <InfoText><strong>Id:</strong> {img.id}</InfoText>
-            <InfoText><strong>BBOX:</strong> {img.bbox?.join(", ")}</InfoText>
-            <InfoText><strong>Data:</strong> {formatarData(img.data)}</InfoText>
-            <SelectButton onClick={() => handleSelecionarImagem(img)}>
-              Selecionar
-            </SelectButton>
-          </ThumbnailCard>
-        ))}
+        {imagens.map((img) => {
+          const isSelected = imagemSelecionada?.id === img.id;
+  
+          return (
+            <ThumbnailCard key={img.id} selected={isSelected}>
+              <ThumbnailImage src={img.thumbnail} alt={img.id} />
+              <InfoText><strong>Id:</strong> {img.id}</InfoText>
+              <InfoText><strong>BBOX:</strong> {img.bbox?.join(", ")}</InfoText>
+              <InfoText><strong>Data:</strong> {formatarData(img.data)}</InfoText>
+  
+              <SelectButton onClick={() => handleSelecionarImagem(img)}>
+                Selecionar
+              </SelectButton>
+  
+              {isSelected && (
+                <SelectButton>Processar Imagem</SelectButton>
+              )}
+            </ThumbnailCard>
+          );
+        })}
         <ButtonVoltar onClick={onClose}>Voltar para Filtros</ButtonVoltar>
       </ScrollContainer>
     </Panel>

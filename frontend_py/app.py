@@ -21,7 +21,12 @@ colecao = st.sidebar.selectbox("Selecione a Coleção", colecoes_disponiveis)
 filtrar_nuvens = st.sidebar.checkbox("Filtrar por nuvens (< 10%)", value=False)
 
 st.subheader("Selecione uma área no mapa (Retângulo)")
-m = folium.Map(location=[-10, -52], zoom_start=4)
+m = folium.Map(
+    location=[-10, -52],
+    zoom_start=4,
+    tiles='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    attr='Esri'
+)
 draw = Draw(export=True)
 draw.add_to(m)
 map_data = st_folium(m, height=500, width=700)
@@ -64,7 +69,7 @@ if "imagens" in st.session_state and st.session_state["imagens"]:
     st.subheader("🖼️ Visualização de imagens encontradas")
 
     for img in st.session_state["imagens"]:
-        st.markdown(f"### 🚁 ID: `{img['id']}`")
+        st.markdown(f"### 🛁 ID: `{img['id']}`")
 
         thumbnail = img.get("thumbnail", "")
         bbox = img.get("bbox", [])
@@ -135,7 +140,7 @@ if "imagens" in st.session_state and st.session_state["imagens"]:
             st.markdown("**📅 Bandas disponíveis para download:**")
             for banda, url in bandas.items():
                 if url:
-                    st.markdown(f"- [{banda}]({url}) - [💾 Baixar]({url})", unsafe_allow_html=True)
+                    st.markdown(f"- [{banda}]({url}) - [📀 Baixar]({url})", unsafe_allow_html=True)
 
         if cmask_url:
             st.markdown(f"[📦 Baixar Cmask]({cmask_url})", unsafe_allow_html=True)
@@ -148,6 +153,41 @@ with st.expander("🧚 Teste Manual de Overlay"):
     if "mostrar_overlay" not in st.session_state:
         st.session_state["mostrar_overlay"] = True
 
+    try:
+        resp = requests.get("http://localhost:8000/processed-list/")
+        resp.raise_for_status()
+        arquivos = resp.json().get("arquivos", [])
+    except Exception as e:
+        st.error(f"Erro ao buscar arquivos processados: {e}")
+        arquivos = []
+
+    if arquivos:
+        ndvi_arquivo = st.selectbox("Selecione um NDVI processado:", arquivos)
+
+        if ndvi_arquivo:
+            selected_id = ndvi_arquivo.replace("_classes.tif", "")
+            tif_name = ndvi_arquivo
+            st.session_state["selected_id"] = selected_id
+            st.session_state["tif_name"] = tif_name
+            png_url = f"http://localhost:8000/output/{selected_id}_rgb.png"
+            
+            # Buscar BBOX real ao selecionar
+            try:
+                bbox_resp = requests.get("http://localhost:8000/bbox-from-tif/", params={"filename": tif_name})
+                bbox_resp.raise_for_status()
+                bbox = bbox_resp.json().get("bbox", None)
+                if bbox:
+                    st.session_state["bbox_real"] = bbox
+                    st.success("📦 BBOX carregado do GeoTIFF.")
+                else:
+                    st.warning("⚠️ BBOX não encontrado para o TIF.")
+            except Exception as e:
+                st.error(f"Erro ao buscar BBOX: {e}")
+    else:
+        st.warning("Nenhum arquivo encontrado.")
+
+    png_url = f"http://localhost:8000/output/{st.session_state.get('selected_id', '')}_rgb.png"
+
     bbox_default = "-54.0,-12.0,-52.0,-10.0"
     if "bbox_real" in st.session_state:
         bbox = st.session_state["bbox_real"]
@@ -156,10 +196,7 @@ with st.expander("🧚 Teste Manual de Overlay"):
         bbox = st.session_state["last_bbox"]
         bbox_default = f"{bbox[0]},{bbox[1]},{bbox[2]},{bbox[3]}"
 
-    teste_url = st.text_input(
-        "URL da imagem RGB (gerada pelo modelo)",
-        "http://localhost:8000/output/CBERS_4_AWFI_20240829_161_123_rgb.png"
-    )
+    teste_url = st.text_input("URL da imagem RGB (gerada pelo modelo)", png_url)
     bbox_input = st.text_input("BBOX no formato: lon_min,lat_min,lon_max,lat_max", bbox_default)
 
     col1, col2 = st.columns(2)
@@ -184,7 +221,7 @@ with st.expander("🧚 Teste Manual de Overlay"):
             popup="BBOX Manual"
         ).add_to(mapa_manual)
 
-        if st.session_state["mostrar_overlay"]:
+        if st.session_state.get("mostrar_overlay", False):
             folium.raster_layers.ImageOverlay(
                 image=teste_url,
                 bounds=[[lat_min, lon_min], [lat_max, lon_max]],

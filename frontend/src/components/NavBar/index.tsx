@@ -11,12 +11,12 @@ import {
   eyeCloseIcon,
   eyeOpenIcon,
 } from "../../assets";
-import { useState, useEffect} from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { useBBox } from "../../context/BBoxContext";
 import ThumbnailViewer from "../ThumbnailViewer/ThumbnailViewer";
+import OverlayManualPanel from "../OverlayManualPanel/OverlayManualPanel";
 
-// Estilos (mesmo que você enviou, sem alterações)
 const NavBar = styled.div`
   position: absolute;
   right: 0rem;
@@ -303,6 +303,7 @@ export default function NavigationBar() {
   const { polygonPoints, bbox } = useBBox();
   const [imagensFiltradas, setImagensFiltradas] = useState<any[]>([]);
   const [mostrarResultados, setMostrarResultados] = useState(false);
+  const [showOverlayManual, setShowOverlayManual] = useState(false);
 
   useEffect(() => {
     if (showFilter || showExport || showSettings) {
@@ -369,7 +370,10 @@ export default function NavigationBar() {
     };
 
     try {
-      const response = await axios.post("http://localhost:8000/buscar-imagens", payload);
+      const response = await axios.post(
+        "http://localhost:8000/buscar-imagens",
+        payload
+      );
       setImagensFiltradas(response.data.dados);
       setMostrarResultados(true);
     } catch (error) {
@@ -380,8 +384,15 @@ export default function NavigationBar() {
 
   return (
     <NavBar>
-      {showFilter && (
-        mostrarResultados ? (
+      {showOverlayManual && (
+        <OverlayManualPanel
+          onClose={() => {
+            setShowOverlayManual(false);
+          }}
+        />
+      )}
+      {showFilter &&
+        (mostrarResultados ? (
           <ThumbnailViewer
             imagens={imagensFiltradas}
             onClose={() => {
@@ -400,50 +411,76 @@ export default function NavigationBar() {
                 <SearchIcon src={searchIcon} alt="Buscar" />
                 <InputWithIcon type="text" placeholder="Buscar cidade" />
               </InputWrapper>
-  
+
               {!selectingBBox && polygonPoints.length < 4 && (
-                <ButtonCustom onClick={() => {
-                  setShowFilter(false);
-                  setSelectingBBox(true);
-                }}>
+                <ButtonCustom
+                  onClick={() => {
+                    setShowFilter(false);
+                    setSelectingBBox(true);
+                  }}
+                >
                   Selecionar Área
                 </ButtonCustom>
               )}
-  
+
               {bbox && (
                 <>
-                  <OptionDiv><InputCustom2 value={bbox[0]} readOnly /></OptionDiv>
-                  <OptionDiv><InputCustom2 value={bbox[1]} readOnly /></OptionDiv>
-                  <OptionDiv><InputCustom2 value={bbox[2]} readOnly /></OptionDiv>
-                  <OptionDiv><InputCustom2 value={bbox[3]} readOnly /></OptionDiv>
+                  <OptionDiv>
+                    <InputCustom2 value={bbox[0]} readOnly />
+                  </OptionDiv>
+                  <OptionDiv>
+                    <InputCustom2 value={bbox[1]} readOnly />
+                  </OptionDiv>
+                  <OptionDiv>
+                    <InputCustom2 value={bbox[2]} readOnly />
+                  </OptionDiv>
+                  <OptionDiv>
+                    <InputCustom2 value={bbox[3]} readOnly />
+                  </OptionDiv>
                 </>
               )}
-  
+
               <OptionDiv>
                 <Options>Coleção/Satelite</Options>
-                <SelectCustom value={colecaoSelecionada} onChange={(e) => setColecaoSelecionada(e.target.value)}>
-                  <option value="" disabled hidden>Selecione a Coleção</option>
+                <SelectCustom
+                  value={colecaoSelecionada}
+                  onChange={(e) => setColecaoSelecionada(e.target.value)}
+                >
+                  <option value="" disabled hidden>
+                    Selecione a Coleção
+                  </option>
                   {colecoes.map((colecaoId) => (
-                    <option key={colecaoId} value={colecaoId}>{colecaoId}</option>
+                    <option key={colecaoId} value={colecaoId}>
+                      {colecaoId}
+                    </option>
                   ))}
                 </SelectCustom>
               </OptionDiv>
-  
+
               <OptionDiv>
                 <Options>Data Início (UTC)</Options>
-                <InputCustom type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+                <InputCustom
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                />
               </OptionDiv>
-  
+
               <OptionDiv>
                 <Options>Data Fim (UTC)</Options>
-                <InputCustom type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+                <InputCustom
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                />
               </OptionDiv>
             </ScrollContainer>
-            <ButtonCustom2 onClick={aplicarFiltros}>Aplicar Filtros</ButtonCustom2>
+            <ButtonCustom2 onClick={aplicarFiltros}>
+              Aplicar Filtros
+            </ButtonCustom2>
           </FilterPanel>
-        )
-      )}
-  
+        ))}
+
       {showExport && (
         <FilterPanel>
           <CloseButton onClick={() => setShowExport(false)}>
@@ -455,17 +492,29 @@ export default function NavigationBar() {
               <SearchIcon src={searchIcon} alt="Buscar" />
               <InputWithIcon type="text" placeholder="Buscar..." />
             </InputWrapper>
-            <OptionDiv><InputCustom2 placeholder="Limite Esquerdo Inferior" /></OptionDiv>
-            <OptionDiv><InputCustom2 placeholder="Limite Esquerdo Superior" /></OptionDiv>
-            <OptionDiv><InputCustom2 placeholder="Limite Direito Superior" /></OptionDiv>
-            <OptionDiv><InputCustom2 placeholder="Limite Direito Inferior" /></OptionDiv>
-  
+            <OptionDiv>
+              <InputCustom2 placeholder="Limite Esquerdo Inferior" />
+            </OptionDiv>
+            <OptionDiv>
+              <InputCustom2 placeholder="Limite Esquerdo Superior" />
+            </OptionDiv>
+            <OptionDiv>
+              <InputCustom2 placeholder="Limite Direito Superior" />
+            </OptionDiv>
+            <OptionDiv>
+              <InputCustom2 placeholder="Limite Direito Inferior" />
+            </OptionDiv>
+
             <OptionDiv>
               <Options>Coleção/Satelite</Options>
               <SelectCustom defaultValue="">
-                <option value="" disabled hidden>Selecione a Coleção</option>
+                <option value="" disabled hidden>
+                  Selecione a Coleção
+                </option>
                 {colecoes.map((colecaoId) => (
-                  <option key={colecaoId} value={colecaoId}>{colecaoId}</option>
+                  <option key={colecaoId} value={colecaoId}>
+                    {colecaoId}
+                  </option>
                 ))}
               </SelectCustom>
             </OptionDiv>
@@ -481,7 +530,7 @@ export default function NavigationBar() {
           </ScrollContainer>
         </FilterPanel>
       )}
-  
+
       {showSettings && (
         <FilterPanel>
           <CloseButton onClick={() => setShowSettings(false)}>
@@ -494,7 +543,10 @@ export default function NavigationBar() {
               <>
                 <OptionDiv>
                   <Options>Nome do funcionário</Options>
-                  <InputUser value={user.name} readOnly={user.role !== "admin"} />
+                  <InputUser
+                    value={user.name}
+                    readOnly={user.role !== "admin"}
+                  />
                 </OptionDiv>
                 <OptionDiv>
                   <Options>Cargo</Options>
@@ -502,15 +554,25 @@ export default function NavigationBar() {
                 </OptionDiv>
                 <OptionDiv>
                   <Options>Email</Options>
-                  <InputUser value={user.email} readOnly={user.role !== "admin"} />
+                  <InputUser
+                    value={user.email}
+                    readOnly={user.role !== "admin"}
+                  />
                 </OptionDiv>
                 <OptionDiv>
                   <Options>Senha</Options>
                   <InputWrapper>
                     <EyeButton onClick={togglePasswordVisibility}>
-                      <img src={showPassword ? eyeOpenIcon : eyeCloseIcon} alt="Mostrar senha" />
+                      <img
+                        src={showPassword ? eyeOpenIcon : eyeCloseIcon}
+                        alt="Mostrar senha"
+                      />
                     </EyeButton>
-                    <InputUser type={showPassword ? "text" : "password"} value={user.password} readOnly={user.role !== "admin"} />
+                    <InputUser
+                      type={showPassword ? "text" : "password"}
+                      value={user.password}
+                      readOnly={user.role !== "admin"}
+                    />
                   </InputWrapper>
                 </OptionDiv>
                 {user.role === "admin" && (
@@ -524,7 +586,6 @@ export default function NavigationBar() {
           </ScrollContainer>
         </FilterPanel>
       )}
-  
       <Top>
         <NavButton
           title="Filtro"
@@ -554,6 +615,21 @@ export default function NavigationBar() {
         >
           <img src={showExport ? openExportIcon : exportIcon} alt="Export" />
         </NavButton>
+        <NavButton
+          title="Overlay Manual"
+          onClick={() => {
+            setShowOverlayManual((prev) => {
+              if (!prev) {
+                setShowFilter(false);
+                setShowExport(false);
+                setShowSettings(false);
+              }
+              return !prev;
+            });
+          }}
+        >
+          <img src={exportIcon} alt="Overlay Manual" />
+        </NavButton>
       </Top>
       <Bottom>
         <NavButton
@@ -568,9 +644,12 @@ export default function NavigationBar() {
             });
           }}
         >
-          <img src={showSettings ? openSettingsIcon : settings} alt="Configurações" />
+          <img
+            src={showSettings ? openSettingsIcon : settings}
+            alt="Configurações"
+          />
         </NavButton>
       </Bottom>
     </NavBar>
-  );  
+  );
 }
