@@ -121,13 +121,24 @@ def run_model(ndvi_path, output_prefix):
     model.load_state_dict(torch.load("models/final_model_1.pth", map_location=device))
     model.eval()
 
+    print("🧹 Calculando número de tiles...")
+    total_tiles_x = (w - 1) // stride + 1
+    total_tiles_y = (h - 1) // stride + 1
+    total_tiles = total_tiles_x * total_tiles_y
+    tile_count = 0
+
+    print(f"🧮 Total de tiles esperados: {total_tiles} ({total_tiles_y} linhas × {total_tiles_x} colunas)")
+
     print("🧹 Rodando modelo tile por tile...")
     with torch.no_grad():
         for i in range(0, h, stride):
             for j in range(0, w, stride):
                 i_end = min(i + tile_size, h)
                 j_end = min(j + tile_size, w)
-                print(f"🧩 Processando tile: linha {i}-{i_end}, coluna {j}-{j_end}")
+
+                tile_count += 1
+                
+                print(f"🧩 Número Total de Tiles: {tile_count}/{total_tiles} - Processando tile: linha {i}-{i_end}, coluna {j}-{j_end}")
 
                 tile = ndvi_array[i:i_end, j:j_end]
 
