@@ -1,16 +1,28 @@
 import { createContext, useContext, useState, ReactNode, useMemo } from "react";
 
+interface ImagemSelecionada {
+  id: string;
+  thumbnail: string;
+  bbox: number[];
+}
+
 interface BBoxContextType {
   polygonPoints: [number, number][];
   setPolygonPoints: React.Dispatch<React.SetStateAction<[number, number][]>>;
-  bbox: number[] | null; // [minLng, minLat, maxLng, maxLat]
+  bbox: number[] | null;
+  imagemSelecionada: ImagemSelecionada | null;
+  setImagemSelecionada: React.Dispatch<React.SetStateAction<ImagemSelecionada | null>>;
+  mostrarImagem: boolean;
+  setMostrarImagem: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const BBoxContext = createContext<BBoxContextType | undefined>(undefined);
 
 export const BBoxProvider = ({ children }: { children: ReactNode }) => {
   const [polygonPoints, setPolygonPoints] = useState<[number, number][]>([]);
-
+  const [imagemSelecionada, setImagemSelecionada] = useState<ImagemSelecionada | null>(null);
+  const [mostrarImagem, setMostrarImagem] = useState(true);
+  
   const bbox = useMemo(() => {
     if (polygonPoints.length !== 4) return null;
 
@@ -26,7 +38,9 @@ export const BBoxProvider = ({ children }: { children: ReactNode }) => {
   }, [polygonPoints]);
 
   return (
-    <BBoxContext.Provider value={{ polygonPoints, setPolygonPoints, bbox }}>
+    <BBoxContext.Provider
+      value={{ polygonPoints, setPolygonPoints, bbox, imagemSelecionada, setImagemSelecionada, mostrarImagem, setMostrarImagem }}
+    >
       {children}
     </BBoxContext.Provider>
   );

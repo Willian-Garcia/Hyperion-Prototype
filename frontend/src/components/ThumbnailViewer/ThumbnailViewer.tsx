@@ -1,4 +1,5 @@
 import styled from "styled-components";
+import { useBBox } from "../../context/BBoxContext";
 
 const Panel = styled.div`
   position: absolute;
@@ -34,12 +35,13 @@ const Panel = styled.div`
   }
 `;
 
-const Title =styled.h3`
-    margin-top: 0.5;
-    margin-bottom: 0.2rem;
-    color: #333;
-    text-align: center;
+const Title = styled.h3`
+  margin-top: 0.5rem;
+  margin-bottom: 0.2rem;
+  color: #333;
+  text-align: center;
 `;
+
 const ScrollContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -106,19 +108,38 @@ interface ThumbnailViewerProps {
     thumbnail: string;
     colecao?: string;
     bbox?: number[];
-    data?:string;
+    data?: string;
   }[];
   onClose: () => void;
 }
 
 export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerProps) {
+  const { setImagemSelecionada, setMostrarImagem } = useBBox();
+
   const formatarData = (dataISO?: string) => {
     if (!dataISO) return "";
     const [ano, mes, dia] = dataISO.split("-");
     return `${dia}/${mes}/${ano}`;
   };
 
-  
+  const handleSelecionarImagem = (img: {
+    id: string;
+    thumbnail: string;
+    bbox?: number[];
+  }) => {
+    if (img.bbox) {
+      setImagemSelecionada({
+        id: img.id,
+        thumbnail: img.thumbnail,
+        bbox: img.bbox,
+      });
+      setMostrarImagem(true); // <- garante que a imagem será visível
+      onClose();
+    } else {
+      alert("Imagem sem BBOX disponível para visualização.");
+    }
+  };
+
   return (
     <Panel>
       <ScrollContainer>
@@ -126,10 +147,12 @@ export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerPro
         {imagens.map((img) => (
           <ThumbnailCard key={img.id}>
             <ThumbnailImage src={img.thumbnail} alt={img.id} />
-            <InfoText><strong>Id: </strong> {img.id}</InfoText>
-            <InfoText><strong>BBOX: </strong> {img.bbox?.join(", ")}</InfoText>
-            <InfoText><strong>Data: </strong>{formatarData(img.data)}</InfoText>
-            <SelectButton>Selecionar</SelectButton>
+            <InfoText><strong>Id:</strong> {img.id}</InfoText>
+            <InfoText><strong>BBOX:</strong> {img.bbox?.join(", ")}</InfoText>
+            <InfoText><strong>Data:</strong> {formatarData(img.data)}</InfoText>
+            <SelectButton onClick={() => handleSelecionarImagem(img)}>
+              Selecionar
+            </SelectButton>
           </ThumbnailCard>
         ))}
         <ButtonVoltar onClick={onClose}>Voltar para Filtros</ButtonVoltar>

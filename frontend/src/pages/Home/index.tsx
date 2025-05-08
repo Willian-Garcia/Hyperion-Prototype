@@ -6,9 +6,11 @@ import {
   useMapEvents,
   Polygon,
   Marker,
+  ImageOverlay,
 } from "react-leaflet";
 import L from "leaflet";
 import { useBBox } from "../../context/BBoxContext";
+import { useState, useEffect } from "react";
 
 const PageContainer = styled.div`
   height: 92vh;
@@ -35,8 +37,6 @@ const MapWrapper = styled.div`
 
 const ClearButton = styled.button`
   position: absolute;
-  bottom: 1rem;
-  left: 1rem;
   background-color: #fe5000;
   color: white;
   padding: 0.5rem 1rem;
@@ -73,20 +73,27 @@ function MapClickHandler({
 }
 
 export default function Home() {
-  const { polygonPoints, setPolygonPoints } = useBBox();
+  const { polygonPoints, setPolygonPoints, imagemSelecionada } = useBBox();
+
+  const [mostrarImagem, setMostrarImagem] = useState(true);
 
   const handleMapClick = (coords: [number, number]) => {
     setPolygonPoints((prev) => {
       if (prev.length >= 4) return prev;
-      const updated = [...prev, coords];
-      console.log("Coordenadas atuais do polígono:", updated);
-      return updated;
+      return [...prev, coords];
     });
   };
 
   const clearPolygon = () => {
     setPolygonPoints([]);
   };
+
+  // Sempre mostrar a nova imagem quando for selecionada
+  useEffect(() => {
+    if (imagemSelecionada) {
+      setMostrarImagem(true);
+    }
+  }, [imagemSelecionada]);
 
   return (
     <PageContainer>
@@ -97,18 +104,49 @@ export default function Home() {
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
           <MapClickHandler onClick={handleMapClick} />
+
           {polygonPoints.map((point, index) => (
             <Marker key={index} position={point} icon={minimalIcon} />
           ))}
+
           {polygonPoints.length > 2 && (
             <Polygon
-              positions={polygonPoints}
-              pathOptions={{ color: "lime" }}
+            positions={polygonPoints}
+            pathOptions={{
+              color: "blue",       // Cor da borda
+              weight: 2,              // Espessura da linha
+              opacity: 0.2,           // Transparência da borda
+              fillColor: "blue",   // Cor de preenchimento
+              fillOpacity: 0.2        // Transparência do preenchimento
+            }}
+            />
+          )}
+
+          {imagemSelecionada && imagemSelecionada.bbox && mostrarImagem && (
+            <ImageOverlay
+              url={imagemSelecionada.thumbnail}
+              bounds={[
+                [imagemSelecionada.bbox[1], imagemSelecionada.bbox[0]],
+                [imagemSelecionada.bbox[3], imagemSelecionada.bbox[2]],
+              ]}
+              opacity={0.8}
             />
           )}
         </MapContainer>
+
+        {imagemSelecionada && imagemSelecionada.bbox && (
+          <ClearButton
+            style={{ bottom: "4rem", left: "1rem" }}
+            onClick={() => setMostrarImagem((prev) => !prev)}
+          >
+            {mostrarImagem ? "Ocultar Imagem" : "Mostrar Imagem"}
+          </ClearButton>
+        )}
+
         {polygonPoints.length > 0 && (
-          <ClearButton onClick={clearPolygon}>Limpar Polígono</ClearButton>
+          <ClearButton style={{ bottom: "1rem", left: "1rem" }} onClick={clearPolygon}>
+            Limpar Polígono
+          </ClearButton>
         )}
       </MapWrapper>
     </PageContainer>
