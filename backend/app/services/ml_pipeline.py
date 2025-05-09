@@ -118,7 +118,11 @@ def run_model(ndvi_path, output_prefix):
     print("🔄 Carregando modelo...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = get_unet_model(num_classes=4).to(device)
-    model.load_state_dict(torch.load("models/final_model_1.pth", map_location=device))
+    model_path = "models/final_model_1.pth"
+    print(f"📦 Carregando modelo de: {model_path}")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Modelo não encontrado em {model_path}")
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
     print("🧹 Calculando número de tiles...")
@@ -172,6 +176,10 @@ def run_model(ndvi_path, output_prefix):
     return output_tif, output_png
 
 async def processar_imagem_completa(data):
+    print(f"🟡 Iniciando processamento de {data.id}")
+    print(f"👉 BAND15 URL: {data.band15_url}")
+    print(f"👉 BAND16 URL: {data.band16_url}")
+
     red_path = f"data/raw/{data.id}_BAND15.tif"
     nir_path = f"data/raw/{data.id}_BAND16.tif"
     ndvi_tif = f"data/processed/{data.id}_ndvi.tif"

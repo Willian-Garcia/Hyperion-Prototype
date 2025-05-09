@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from app.schemas.ml_request_schema import MLProcessRequest
 from app.services.ml_pipeline import processar_imagem_completa
+import traceback
 
 router = APIRouter()
 
@@ -17,6 +18,7 @@ async def processar_imagem(data: MLProcessRequest):
         resultado = await processar_imagem_completa(data)
         return resultado
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
 
 

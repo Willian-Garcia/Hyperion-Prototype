@@ -14,12 +14,35 @@ class DownloadRequest(BaseModel):
     cmask: str = None
     thumbnail: str = None
 
+# Função para checar disponibilidade antes de baixar
+def checar_disponibilidade(url: str, timeout=10) -> bool:
+    try:
+        resposta = requests.head(url, timeout=timeout)
+        return resposta.status_code == 200
+    except requests.RequestException as e:
+        print(f"⚠️ Erro ao verificar URL {url}: {e}")
+        return False
+
+
 # Função para baixar o arquivo
 def baixar_arquivo(url, caminho_destino):
-    resposta = requests.get(url)
-    resposta.raise_for_status()
-    with open(caminho_destino, 'wb') as f:
-        f.write(resposta.content)
+    if not checar_disponibilidade(url):
+        raise Exception(f"URL indisponível ou não encontrada: {url}")
+
+    try:
+        print(f"⬇️ Baixando: {url} → {caminho_destino}")
+        resposta = requests.get(url, timeout=60)
+        resposta.raise_for_status()
+
+        os.makedirs(os.path.dirname(caminho_destino), exist_ok=True)
+        with open(caminho_destino, 'wb') as f:
+            f.write(resposta.content)
+
+        print(f"✅ Arquivo salvo em: {caminho_destino}")
+    except requests.RequestException as e:
+        print(f"❌ Falha ao baixar {url}: {e}")
+        raise
+
 
 # Função para baixar e compactar as bandas
 def baixar_e_compactar_bandas(id: str, bandas: dict, cmask: str, thumbnail: str):
