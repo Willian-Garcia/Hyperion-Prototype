@@ -8,7 +8,7 @@ const Panel = styled.div`
   top: 0;
   right: 100%;
   width: 400px;
-  max-height: 100%;
+  height: 100%;
   background-color: #f9f9f9;
   padding: 1rem;
   border-radius: 12px 0px 0px 12px;
@@ -87,7 +87,11 @@ interface Props {
 }
 
 export default function OverlayManualPanel({ onClose }: Props) {
-  const { setImagemSelecionada, setMostrarImagem } = useBBox();
+  const {
+    setImagemProcessada,
+    setMostrarProcessada,
+  } = useBBox();
+
   const [arquivos, setArquivos] = useState<string[]>([]);
   const [tifSelecionado, setTifSelecionado] = useState("");
   const [bbox, setBbox] = useState("");
@@ -130,17 +134,17 @@ export default function OverlayManualPanel({ onClose }: Props) {
       return;
     }
 
-    setImagemSelecionada({
+    setImagemProcessada({
       id: tifSelecionado,
       thumbnail: pngUrl,
       bbox: coords,
     });
 
-    setMostrarImagem(true);
+    setMostrarProcessada(true);
   };
 
   const handleOcultar = () => {
-    setMostrarImagem(false);
+    setMostrarProcessada(false);
   };
 
   return (

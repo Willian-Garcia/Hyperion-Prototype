@@ -73,9 +73,16 @@ function MapClickHandler({
 }
 
 export default function Home() {
-  const { polygonPoints, setPolygonPoints, imagemSelecionada } = useBBox();
-
-  const [mostrarImagem, setMostrarImagem] = useState(true);
+  const {
+    polygonPoints,
+    setPolygonPoints,
+    imagemThumbnail,
+    imagemProcessada,
+    mostrarThumbnail,
+    mostrarProcessada,
+    setMostrarThumbnail,
+    setMostrarProcessada,
+  } = useBBox();
 
   const handleMapClick = (coords: [number, number]) => {
     setPolygonPoints((prev) => {
@@ -87,13 +94,6 @@ export default function Home() {
   const clearPolygon = () => {
     setPolygonPoints([]);
   };
-
-  // Sempre mostrar a nova imagem quando for selecionada
-  useEffect(() => {
-    if (imagemSelecionada) {
-      setMostrarImagem(true);
-    }
-  }, [imagemSelecionada]);
 
   return (
     <PageContainer>
@@ -111,40 +111,60 @@ export default function Home() {
 
           {polygonPoints.length > 2 && (
             <Polygon
-            positions={polygonPoints}
-            pathOptions={{
-              color: "blue",       // Cor da borda
-              weight: 2,              // Espessura da linha
-              opacity: 0.2,           // Transparência da borda
-              fillColor: "blue",   // Cor de preenchimento
-              fillOpacity: 0.2        // Transparência do preenchimento
-            }}
+              positions={polygonPoints}
+              pathOptions={{
+                color: "blue",
+                weight: 2,
+                opacity: 0.2,
+                fillColor: "blue",
+                fillOpacity: 0.2,
+              }}
             />
           )}
 
-          {imagemSelecionada && imagemSelecionada.bbox && mostrarImagem && (
+          {imagemThumbnail && imagemThumbnail.bbox && mostrarThumbnail && (
             <ImageOverlay
-              url={imagemSelecionada.thumbnail}
+              url={imagemThumbnail.thumbnail}
               bounds={[
-                [imagemSelecionada.bbox[1], imagemSelecionada.bbox[0]],
-                [imagemSelecionada.bbox[3], imagemSelecionada.bbox[2]],
+                [imagemThumbnail.bbox[1], imagemThumbnail.bbox[0]],
+                [imagemThumbnail.bbox[3], imagemThumbnail.bbox[2]],
+              ]}
+              opacity={0.8}
+            />
+          )}
+
+          {imagemProcessada && imagemProcessada.bbox && mostrarProcessada && (
+            <ImageOverlay
+              url={imagemProcessada.thumbnail}
+              bounds={[
+                [imagemProcessada.bbox[1], imagemProcessada.bbox[0]],
+                [imagemProcessada.bbox[3], imagemProcessada.bbox[2]],
               ]}
               opacity={0.8}
             />
           )}
         </MapContainer>
-
-        {imagemSelecionada && imagemSelecionada.bbox && (
+        {imagemProcessada && imagemProcessada.bbox && (
           <ClearButton
-            style={{ bottom: "4rem", left: "1rem" }}
-            onClick={() => setMostrarImagem((prev) => !prev)}
+            style={{ bottom: "6rem", left: "1rem" }}
+            onClick={() => setMostrarProcessada((prev) => !prev)}
           >
-            {mostrarImagem ? "Ocultar Imagem" : "Mostrar Imagem"}
+            {mostrarProcessada ? "Ocultar Processada" : "Mostrar Processada"}
           </ClearButton>
         )}
-
+        {imagemThumbnail && imagemThumbnail.bbox && (
+          <ClearButton
+            style={{ bottom: "3.5rem", left: "1rem" }}
+            onClick={() => setMostrarThumbnail((prev) => !prev)}
+          >
+            {mostrarThumbnail ? "Ocultar Thumbnail" : "Mostrar Thumbnail"}
+          </ClearButton>
+        )}
         {polygonPoints.length > 0 && (
-          <ClearButton style={{ bottom: "1rem", left: "1rem" }} onClick={clearPolygon}>
+          <ClearButton
+            style={{ bottom: "1rem", left: "1rem" }}
+            onClick={clearPolygon}
+          >
             Limpar Polígono
           </ClearButton>
         )}

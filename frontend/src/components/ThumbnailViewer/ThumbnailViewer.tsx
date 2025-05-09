@@ -37,8 +37,16 @@ const Panel = styled.div`
 
 const Title = styled.h3`
   margin-top: 0.5rem;
-  margin-bottom: 0.2rem;
+  margin-bottom: 0;
   color: #333;
+  text-align: center;
+`;
+
+const ImageCountText = styled.p`
+  font-size: 14px;
+  color: #555;
+  margin-top: 0px;
+  margin-bottom: 0px;
   text-align: center;
 `;
 
@@ -117,8 +125,13 @@ interface ThumbnailViewerProps {
 }
 
 export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerProps) {
-  const { setImagemSelecionada, setMostrarImagem, imagemSelecionada } = useBBox();
-
+  const {
+    imagemThumbnail,
+    setImagemThumbnail,
+    setMostrarThumbnail,
+    setImagemProcessada,
+    setMostrarProcessada,
+  } = useBBox();
 
   const formatarData = (dataISO?: string) => {
     if (!dataISO) return "";
@@ -132,12 +145,12 @@ export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerPro
     bbox?: number[];
   }) => {
     if (img.bbox) {
-      setImagemSelecionada({
+      setImagemThumbnail({
         id: img.id,
         thumbnail: img.thumbnail,
         bbox: img.bbox,
       });
-      setMostrarImagem(true); // <- garante que a imagem será visível
+      setMostrarThumbnail(true);
     } else {
       alert("Imagem sem BBOX disponível para visualização.");
     }
@@ -153,57 +166,59 @@ export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerPro
       alert("Imagem selecionada não possui BBOX ou bandas necessárias.");
       return;
     }
-  
+
     const payload = {
       id: img.id,
       band15_url: img.bandas.BAND15,
       band16_url: img.bandas.BAND16,
       bbox: img.bbox,
     };
-  
+
     try {
       const response = await fetch("http://localhost:8000/processar-imagem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-  
+
       if (!response.ok) throw new Error("Erro no processamento da imagem.");
-  
+
       const resultado = await response.json();
       const imagemProcessadaUrl = `http://localhost:8000${resultado.preview_png}`;
       const bboxFinal = resultado.bbox_real ?? resultado.bbox;
-  
-      setImagemSelecionada({
+
+      setImagemProcessada({
         id: img.id,
         thumbnail: imagemProcessadaUrl,
         bbox: bboxFinal,
       });
-  
-      setMostrarImagem(true);
+
+      setMostrarProcessada(true);
     } catch (error) {
       console.error("Erro ao processar imagem:", error);
       alert("Erro ao processar imagem.");
     }
   };
+
   return (
     <Panel>
       <ScrollContainer>
         <Title>Resultados da Busca</Title>
+        <ImageCountText>{imagens.length} imagens foram encontradas</ImageCountText>
         {imagens.map((img) => {
-          const isSelected = imagemSelecionada?.id === img.id;
-  
+          const isSelected = imagemThumbnail?.id === img.id;
+
           return (
             <ThumbnailCard key={img.id} selected={isSelected}>
               <ThumbnailImage src={img.thumbnail} alt={img.id} />
               <InfoText><strong>Id:</strong> {img.id}</InfoText>
               <InfoText><strong>BBOX:</strong> {img.bbox?.join(", ")}</InfoText>
               <InfoText><strong>Data:</strong> {formatarData(img.data)}</InfoText>
-  
+
               <SelectButton onClick={() => handleSelecionarImagem(img)}>
                 Selecionar
               </SelectButton>
-  
+
               {isSelected && (
                 <SelectButton onClick={() => handleProcessarImagem(img)}>Processar Imagem</SelectButton>
               )}

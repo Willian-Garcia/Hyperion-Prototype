@@ -306,14 +306,14 @@ export default function NavigationBar() {
   const [showOverlayManual, setShowOverlayManual] = useState(false);
 
   useEffect(() => {
-    if (showFilter || showExport || showSettings) {
+    if (showFilter || showExport || showSettings || showOverlayManual) {
       setIsLoading(true);
       const timeout = setTimeout(() => {
         setIsLoading(false);
       }, 2000);
       return () => clearTimeout(timeout);
     }
-  }, [showFilter, showExport, showSettings]);
+  }, [showFilter, showExport, showSettings, showOverlayManual]);
 
   const [user, setUser] = useState({
     name: "",
@@ -594,6 +594,7 @@ export default function NavigationBar() {
               if (!prev) {
                 setShowExport(false);
                 setShowSettings(false);
+                setShowOverlayManual(false);
               }
               return !prev;
             });
@@ -608,6 +609,7 @@ export default function NavigationBar() {
               if (!prev) {
                 setShowFilter(false);
                 setShowSettings(false);
+                setShowOverlayManual(false);
               }
               return !prev;
             });
