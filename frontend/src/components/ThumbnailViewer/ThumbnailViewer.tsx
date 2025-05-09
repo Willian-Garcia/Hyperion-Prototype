@@ -108,6 +108,10 @@ interface ThumbnailViewerProps {
     colecao?: string;
     bbox?: number[];
     data?: string;
+    bandas?: {
+      BAND15?: string;
+      BAND16?: string;
+    };
   }[];
   onClose: () => void;
 }
@@ -139,6 +143,49 @@ export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerPro
     }
   };
 
+  const handleProcessarImagem = async (img: {
+    id: string;
+    thumbnail: string;
+    bbox?: number[];
+    bandas?: { [key: string]: string };
+  }) => {
+    if (!img.bbox || !img.bandas?.BAND15 || !img.bandas?.BAND16) {
+      alert("Imagem selecionada não possui BBOX ou bandas necessárias.");
+      return;
+    }
+  
+    const payload = {
+      id: img.id,
+      band15_url: img.bandas.BAND15,
+      band16_url: img.bandas.BAND16,
+      bbox: img.bbox,
+    };
+  
+    try {
+      const response = await fetch("http://localhost:8000/processar-imagem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+  
+      if (!response.ok) throw new Error("Erro no processamento da imagem.");
+  
+      const resultado = await response.json();
+      const imagemProcessadaUrl = `http://localhost:8000${resultado.preview_png}`;
+      const bboxFinal = resultado.bbox_real ?? resultado.bbox;
+  
+      setImagemSelecionada({
+        id: img.id,
+        thumbnail: imagemProcessadaUrl,
+        bbox: bboxFinal,
+      });
+  
+      setMostrarImagem(true);
+    } catch (error) {
+      console.error("Erro ao processar imagem:", error);
+      alert("Erro ao processar imagem.");
+    }
+  };
   return (
     <Panel>
       <ScrollContainer>
@@ -158,7 +205,7 @@ export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerPro
               </SelectButton>
   
               {isSelected && (
-                <SelectButton>Processar Imagem</SelectButton>
+                <SelectButton onClick={() => handleProcessarImagem(img)}>Processar Imagem</SelectButton>
               )}
             </ThumbnailCard>
           );

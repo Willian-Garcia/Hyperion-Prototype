@@ -20,6 +20,7 @@ def listar_processados():
 @router.get("/bbox-from-tif/")
 def bbox_from_tif(filename: str = Query(...)):
     try:
+        json_filename = filename.replace("_classes.tif", ".json")
         caminho = os.path.join("output", filename)
         if not os.path.exists(caminho):
             raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
