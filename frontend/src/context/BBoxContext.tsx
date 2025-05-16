@@ -20,6 +20,13 @@ interface BBoxContextType {
   setImagemProcessada: React.Dispatch<React.SetStateAction<Imagem | null>>;
   mostrarProcessada: boolean;
   setMostrarProcessada: React.Dispatch<React.SetStateAction<boolean>>;
+
+  processando: boolean;
+  setProcessando: React.Dispatch<React.SetStateAction<boolean>>;
+  tempoEstimado: number | null;
+  setTempoEstimado: React.Dispatch<React.SetStateAction<number | null>>;
+  cancelarProcesso: boolean;
+  setCancelarProcesso: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const BBoxContext = createContext<BBoxContextType | undefined>(undefined);
@@ -30,6 +37,10 @@ export const BBoxProvider = ({ children }: { children: ReactNode }) => {
   const [imagemProcessada, setImagemProcessada] = useState<Imagem | null>(null);
   const [mostrarThumbnail, setMostrarThumbnail] = useState(true);
   const [mostrarProcessada, setMostrarProcessada] = useState(true);
+
+  const [processando, setProcessando] = useState(false);
+  const [tempoEstimado, setTempoEstimado] = useState<number | null>(null);
+  const [cancelarProcesso, setCancelarProcesso] = useState(false);
 
   const bbox = useMemo(() => {
     if (polygonPoints.length !== 4) return null;
@@ -52,6 +63,12 @@ export const BBoxProvider = ({ children }: { children: ReactNode }) => {
         setImagemProcessada,
         mostrarProcessada,
         setMostrarProcessada,
+        processando,
+        setProcessando,
+        tempoEstimado,
+        setTempoEstimado,
+        cancelarProcesso,
+        setCancelarProcesso,
       }}
     >
       {children}
