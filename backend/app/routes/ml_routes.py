@@ -1,55 +1,42 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from app.schemas.ml_request_schema import MLProcessRequest
 from app.services.ml_pipeline import processar_imagem_completa
-from app.utils.cancel_manager import CancelManager
-
-cancel_map = {}  # Dict[str, CancelManager]
+from app.utils.cancel_instance import cancel_manager
 
 router = APIRouter()
 
 @router.post("/processar-imagem")
-async def processar_imagem(data: MLProcessRequest):
-    """
-    Rota que executa o pipeline completo:
-    1. Baixa BAND15 e BAND16
-    2. Gera NDVI e preview
-    3. Executa o modelo U-Net para segmentação
-    4. Retorna os caminhos dos arquivos e bbox real
-    """
+async def processar_imagem(data: MLProcessRequest, background_tasks: BackgroundTasks):
     print("🔍 Início do processamento de imagem")
-    try:
-        cancel = CancelManager()
-        cancel_map[data.id] = cancel
+    cancel_manager.iniciar(data.id)
+    cancel_event = cancel_manager.get_evento(data.id)
 
-        resultado = await processar_imagem_completa(data, cancel)
-        cancel_map.pop(data.id, None)
+    def tarefa():
+        import asyncio
+        try:
+            asyncio.run(processar_imagem_completa(data, cancel=cancel_event))
+        except Exception as e:
+            print(f"⚠️ Erro durante processamento: {e}")
+        finally:
+            cancel_manager.limpar(data.id)
 
-        return resultado
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        cancel_map.pop(data.id, None)
-        raise HTTPException(status_code=500, detail=f"Erro no processamento: {str(e)}")
+    background_tasks.add_task(tarefa)
 
+    return {"status": "processamento iniciado"}
 
-@router.post("/cancelar-processamento/{id}")
-async def cancelar_processamento(id: str):
-    cancel = cancel_map.get(id)
-    if cancel:
-        cancel.cancel()
-        return {"status": "cancelado"}
-    else:
-        raise HTTPException(status_code=404, detail="Processo não encontrado")
+@router.post("/cancelar-processamento")
+async def cancelar_processamento(id: str = Query(...)):
+    print(f"🚨 Requisição para cancelar: {id}")
+    cancel_manager.cancelar(id)
+    print("✅ Cancelamento registrado no backend.")
+    return {"status": "cancelado"}
 
+@router.post("/cancelar-processamento-test")
+def cancelar_fixo():
+    print("🚨 Rota fixa de cancelamento acionada")
+    return {"status": "ok"}
 
-#Este novo arquivo substitui e funde os seguintes arquivos do primeiro repositório:
-
-#Arquivo original 
-# Parte de main.py (v1) → /processar-imagem/
-#   Separado corretamente
-#   Agora está modular em routes/ml_routes.py
-
-#Arquivo original 
-# MLProcessRequest de schemas/ml_request_schema.py
-#   Reutilizado
-#   Continua em uso sem alterações
+@router.get("/ping")
+def ping():
+    print("🔔 Backend respondeu ao ping")
+    return {"status": "ok"}

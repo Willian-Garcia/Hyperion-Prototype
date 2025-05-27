@@ -7,19 +7,21 @@ from rasterio.windows import from_bounds
 from PIL import Image, ImageDraw
 from app.utils.download_utils import baixar_arquivo
 from app.model import get_unet_model
-from app.utils.cancel_manager import CancelManager
+from asyncio import Event  # Atualização principal aqui
 import matplotlib.pyplot as plt
 import logging
 
-# Cores das classes
 COLORS = {
     1: (255, 0, 0, 255),     # Queimada
     2: (124, 94, 21, 255),   # Solo
     3: (16, 149, 9, 255),    # Vegetação
 }
 
-def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: CancelManager = None):
+def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: Event = None):
+    print(f"📥 Abrindo RED: {red_path} e NIR: {nir_path}")
+
     with rasterio.open(red_path) as red, rasterio.open(nir_path) as nir:
+        print("🔍 Verificando interseção espacial...")
         red_bounds = red.bounds
         nir_bounds = nir.bounds
 
@@ -36,10 +38,13 @@ def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: Can
         red_data = red.read(1, window=red_window).astype("float32")
         nir_data = nir.read(1, window=nir_window).astype("float32")
 
-        if cancel and cancel.is_cancelled():
+        print(f"📏 Shape comum: {red_data.shape}")
+
+        if cancel and cancel.is_set():
             logging.warning("🛑 Cancelado durante leitura de dados NDVI")
             raise Exception("Processamento cancelado durante NDVI")
 
+        print("🧮 Calculando NDVI...")
         ndvi = (nir_data - red_data) / (nir_data + red_data + 1e-10)
         ndvi = np.clip(ndvi, -1, 1)
 
@@ -52,14 +57,18 @@ def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: Can
             transform=rasterio.windows.transform(red_window, red.transform)
         )
 
+        print(f"💾 Salvando NDVI em: {output_path}")
         with rasterio.open(output_path, "w", **profile) as dst:
             dst.write(ndvi, 1)
 
         if preview_path:
+            print(f"🖼️ Gerando visualização temática em: {preview_path}")
             save_ndvi_preview(ndvi, preview_path, cancel)
 
-def save_ndvi_preview(ndvi_array, save_path, cancel: CancelManager = None):
-    if cancel and cancel.is_cancelled():
+        print("✅ NDVI processado e salvo com sucesso.")
+
+def save_ndvi_preview(ndvi_array, save_path, cancel: Event = None):
+    if cancel and cancel.is_set():
         logging.warning("🛑 Cancelado antes de gerar preview NDVI")
         raise Exception("Cancelado antes de salvar visualização NDVI")
 
@@ -76,7 +85,7 @@ def save_ndvi_preview(ndvi_array, save_path, cancel: CancelManager = None):
     plt.savefig(save_path, dpi=150)
     plt.close()
 
-def run_model(ndvi_path, output_prefix, cancel: CancelManager = None):
+def run_model(ndvi_path, output_prefix, cancel: Event = None):
     tile_size = 256
     stride = 128
 
@@ -86,6 +95,7 @@ def run_model(ndvi_path, output_prefix, cancel: CancelManager = None):
     output_tif = os.path.join(output_dir, f"{output_prefix}_classes.tif")
     output_png = os.path.join(output_dir, f"{output_prefix}_rgb.png")
 
+    print("📅 Carregando NDVI...")
     with rasterio.open(ndvi_path) as src:
         ndvi_array = src.read(1)
         profile = src.profile.copy()
@@ -95,67 +105,108 @@ def run_model(ndvi_path, output_prefix, cancel: CancelManager = None):
         ndvi_array = (ndvi_array + 1) / 2
 
     h, w = ndvi_array.shape
+    print(f"📏 Dimensão: {h}x{w}")
+
     predicted_mask = np.zeros((h, w), dtype=np.uint8)
     rgba_image = Image.new("RGBA", (w, h))
     draw = ImageDraw.Draw(rgba_image)
 
+    print("🔄 Carregando modelo...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = get_unet_model(num_classes=4).to(device)
-    model.load_state_dict(torch.load("models/final_model_1.pth", map_location=device))
+    model_path = "models/final_model_1.pth"
+    print(f"📦 Carregando modelo de: {model_path}")
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Modelo não encontrado em {model_path}")
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
+    print("🧹 Calculando número de tiles...")
+    total_tiles_x = (w - 1) // stride + 1
+    total_tiles_y = (h - 1) // stride + 1
+    total_tiles = total_tiles_x * total_tiles_y
+    tile_count = 0
+
+    print(f"🧮 Total de tiles esperados: {total_tiles} ({total_tiles_y} linhas × {total_tiles_x} colunas)")
+
+    print("🧹 Rodando modelo tile por tile...")
     with torch.no_grad():
         for i in range(0, h, stride):
             for j in range(0, w, stride):
-                if cancel and cancel.is_cancelled():
-                    logging.warning("🛑 Cancelado durante segmentação U-Net")
-                    raise Exception("Processamento cancelado durante segmentação")
+                if cancel and cancel.is_set():
+                    logging.warning("🛑 Cancelado antes do tile")
+                    raise Exception("Cancelado antes do tile")
 
                 i_end = min(i + tile_size, h)
                 j_end = min(j + tile_size, w)
+
+                tile_count += 1
+                print(f"🧩 Número Total de Tiles: {tile_count}/{total_tiles} - Processando tile: linha {i}-{i_end}, coluna {j}-{j_end}")
 
                 tile = ndvi_array[i:i_end, j:j_end]
                 pad_h = tile_size - tile.shape[0]
                 pad_w = tile_size - tile.shape[1]
                 tile_padded = np.pad(tile, ((0, pad_h), (0, pad_w)), mode='constant', constant_values=0)
 
+                if cancel and cancel.is_set():
+                    logging.warning("🛑 Cancelado antes do forward")
+                    raise Exception("Cancelado antes do forward")
+
                 tile_tensor = torch.tensor(tile_padded, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
                 output = model(tile_tensor).squeeze(0).cpu().numpy()
-                output = output[:, :tile.shape[0], :tile.shape[1]]
 
+                if cancel and cancel.is_set():
+                    logging.warning("🛑 Cancelado após forward")
+                    raise Exception("Cancelado após forward")
+
+                output = output[:, :tile.shape[0], :tile.shape[1]]
                 predicted = np.argmax(output, axis=0).astype(np.uint8)
+
+                if cancel and cancel.is_set():
+                    logging.warning("🛑 Cancelado após argmax")
+                    raise Exception("Cancelado após argmax")
+
                 predicted_mask[i:i_end, j:j_end] = predicted
 
                 for label, color in COLORS.items():
                     ys, xs = np.where(predicted == label)
                     for y, x in zip(ys, xs):
+                        if cancel and cancel.is_set():
+                            logging.warning("🛑 Cancelado durante desenho dos pixels")
+                            raise Exception("Cancelado durante desenho")
                         draw.point((j + x, i + y), fill=color)
 
+    print(f"📀 Salvando classes em {output_tif}")
     profile.pop("nodata", None)
     profile.update(dtype=rasterio.uint8, count=1)
     with rasterio.open(output_tif, "w", **profile) as dst:
         dst.write(predicted_mask, 1)
 
+    print(f"📀 Salvando preview transparente em {output_png}")
     rgba_image.save(output_png)
+
+    print("✅ Tudo pronto.")
     return output_tif, output_png
 
-async def processar_imagem_completa(data, cancel: CancelManager):
+async def processar_imagem_completa(data, cancel: Event):
     logging.info(f"🚀 Iniciando processamento para: {data.id}")
+    print(f"👉 BAND15 URL: {data.band15_url}")
+    print(f"👉 BAND16 URL: {data.band16_url}")
 
     red_path = f"data/raw/{data.id}_BAND15.tif"
     nir_path = f"data/raw/{data.id}_BAND16.tif"
     ndvi_tif = f"data/processed/{data.id}_ndvi.tif"
     ndvi_preview = f"data/processed/{data.id}_ndvi_preview.png"
 
-    if cancel.is_cancelled():
+    if cancel.is_set():
         raise Exception("Processamento cancelado antes de iniciar downloads")
 
-    baixar_arquivo(data.band15_url, red_path)
-    if cancel.is_cancelled():
+    baixar_arquivo(data.band15_url, red_path, cancel)
+    if cancel.is_set():
         raise Exception("Cancelado após download BAND15")
 
-    baixar_arquivo(data.band16_url, nir_path)
-    if cancel.is_cancelled():
+    baixar_arquivo(data.band16_url, nir_path, cancel)
+    if cancel.is_set():
         raise Exception("Cancelado após download BAND16")
 
     compute_ndvi(red_path, nir_path, ndvi_tif, ndvi_preview, cancel)
@@ -172,7 +223,6 @@ async def processar_imagem_completa(data, cancel: CancelManager):
         "bbox": data.bbox,
         "bbox_real": real_bbox
     }
-
 
 #Este novo arquivo substitui e funde os seguintes arquivos do primeiro repositório:
 

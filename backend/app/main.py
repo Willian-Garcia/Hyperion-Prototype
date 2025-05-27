@@ -8,14 +8,17 @@ from app.routes.ml_routes import router as ml_router
 from app.routes.output_routes import router as output_router
 from app.schemas.tb_consulta import create_tables
 from fastapi.middleware.cors import CORSMiddleware
+from app.utils.cancel_manager import CancelManager
 import logging
+
+cancel_manager = CancelManager()
 
 app = FastAPI(title="Monitoramento de Queimadas")
 
 # ✅ Configuração do CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # ou ["*"] para liberar geral em desenvolvimento
+    allow_origins=["*"],  # ou ["*"] para liberar geral em desenvolvimento
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -49,3 +52,5 @@ app.include_router(ml_router)
 app.include_router(output_router)
 
 app.mount("/output", StaticFiles(directory="output"), name="output")
+
+__all__ = ["cancel_manager"]
