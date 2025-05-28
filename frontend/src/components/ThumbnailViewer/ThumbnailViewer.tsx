@@ -198,7 +198,7 @@ export default function ThumbnailViewer({
                 <strong>Id:</strong> {img.id}
               </InfoText>
               <InfoText>
-                <strong>BBOX:</strong> {img.bbox?.join(", ")}
+                <strong>BBox:</strong> {img.bbox?.join(", ")}
               </InfoText>
               <InfoText>
                 <strong>Data:</strong> {formatarData(img.data)}

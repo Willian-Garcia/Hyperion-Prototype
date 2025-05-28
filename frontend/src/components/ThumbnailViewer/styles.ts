@@ -57,6 +57,9 @@ export const ScrollContainer = styled.div`
 `;
 
 export const ThumbnailCard = styled.div<{ selected: boolean }>`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   width: 100%;
   background-color: #d9d9d9;
   border-radius: 12px;
@@ -65,9 +68,9 @@ export const ThumbnailCard = styled.div<{ selected: boolean }>`
 `;
 
 export const ThumbnailImage = styled.img`
-  width: 100%;
-  height: 75%;
-  object-fit: cover;
+  width: 80%;
+  height: auto;
+  object-fit: contain;
   border-radius: 8px;
   margin-bottom: 0.75rem;
 `;
