@@ -7,9 +7,10 @@ from rasterio.windows import from_bounds
 from PIL import Image, ImageDraw
 from app.utils.download_utils import baixar_arquivo
 from app.model import get_unet_model
-from asyncio import Event  # Atualização principal aqui
+from asyncio import Event
 import matplotlib.pyplot as plt
 import logging
+from app.utils.progresso_manager import progresso_manager
 
 COLORS = {
     1: (255, 0, 0, 255),     # Queimada
@@ -19,7 +20,6 @@ COLORS = {
 
 def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: Event = None):
     print(f"📥 Abrindo RED: {red_path} e NIR: {nir_path}")
-
     with rasterio.open(red_path) as red, rasterio.open(nir_path) as nir:
         print("🔍 Verificando interseção espacial...")
         red_bounds = red.bounds
@@ -37,8 +37,6 @@ def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: Eve
 
         red_data = red.read(1, window=red_window).astype("float32")
         nir_data = nir.read(1, window=nir_window).astype("float32")
-
-        print(f"📏 Shape comum: {red_data.shape}")
 
         if cancel and cancel.is_set():
             logging.warning("🛑 Cancelado durante leitura de dados NDVI")
@@ -141,6 +139,7 @@ def run_model(ndvi_path, output_prefix, cancel: Event = None):
                 j_end = min(j + tile_size, w)
 
                 tile_count += 1
+                progresso_manager.set_progresso(output_prefix, tile_count / total_tiles)
                 print(f"🧩 Número Total de Tiles: {tile_count}/{total_tiles} - Processando tile: linha {i}-{i_end}, coluna {j}-{j_end}")
 
                 tile = ndvi_array[i:i_end, j:j_end]
@@ -215,6 +214,8 @@ async def processar_imagem_completa(data, cancel: Event):
     with rasterio.open(tif_final) as src:
         bounds = src.bounds
         real_bbox = [bounds.left, bounds.bottom, bounds.right, bounds.top]
+
+    progresso_manager.limpar(data.id)
 
     logging.info(f"✅ Processamento concluído para: {data.id}")
     return {

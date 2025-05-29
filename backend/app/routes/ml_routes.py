@@ -2,6 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from app.schemas.ml_request_schema import MLProcessRequest
 from app.services.ml_pipeline import processar_imagem_completa
 from app.utils.cancel_instance import cancel_manager
+from app.utils.progresso_manager import progresso_manager
 
 router = APIRouter()
 
@@ -30,6 +31,11 @@ async def cancelar_processamento(id: str = Query(...)):
     cancel_manager.cancelar(id)
     print("✅ Cancelamento registrado no backend.")
     return {"status": "cancelado"}
+
+@router.get("/status-processamento/{id}")
+async def status_processamento(id: str):
+    progresso = progresso_manager.get_progresso(id)
+    return {"progresso": progresso}
 
 @router.post("/cancelar-processamento-test")
 def cancelar_fixo():

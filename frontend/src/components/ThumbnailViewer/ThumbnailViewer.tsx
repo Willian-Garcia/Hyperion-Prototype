@@ -42,7 +42,9 @@ export default function ThumbnailViewer({
   const [processingId, setProcessingId] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const [tempoEstimado, setTempoEstimado] = useState<number | null>(null);
+  const [tempoEstimadoTotal, setTempoEstimadoTotal] = useState<number | null>(null);
   const intervaloTempoRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatarData = (dataISO?: string) => {
     if (!dataISO) return "";
@@ -92,12 +94,26 @@ export default function ThumbnailViewer({
       abortControllerRef.current = new AbortController();
 
       const start = Date.now();
-      intervaloTempoRef.current = setInterval(() => {
-        const elapsed = ((Date.now() - start) / 1000).toFixed(1);
-        setTempoEstimado(parseFloat(elapsed));
+      intervaloTempoRef.current = setInterval(async () => {
+        const elapsed = (Date.now() - start) / 1000;
+        setTempoEstimado(elapsed);
+
+        try {
+          const progressoRes = await fetch(`http://localhost:8000/status-processamento/${img.id}`);
+          const progressoData = await progressoRes.json();
+          const progresso = progressoData.progresso;
+
+          if (progresso > 0) {
+            const estimadoTotal = elapsed / progresso;
+            setTempoEstimadoTotal(estimadoTotal);
+          } else {
+            setTempoEstimadoTotal(null);
+          }
+        } catch (err) {
+          console.error("Erro ao buscar progresso:", err);
+        }
       }, 1000);
 
-      // ⏱️ Dispara requisição sem aguardar (BackgroundTask)
       fetch("http://localhost:8000/processar-imagem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -105,40 +121,50 @@ export default function ThumbnailViewer({
         signal: abortControllerRef.current.signal,
       });
 
-      // Inicia verificação periódica se a imagem foi processada
-      const pollingInterval = setInterval(async () => {
+      pollingRef.current = setInterval(async () => {
         try {
           const res = await fetch("http://localhost:8000/processed-list/");
           if (!res.ok) return;
 
-          const imagensProcessadas = await res.json();
-          const imagem = imagensProcessadas.find((i: any) => i.id === img.id);
+          const data = await res.json();
+          const arquivos: string[] = data.arquivos;
+          const encontrada = arquivos.find((nome) => nome.includes(img.id));
 
-          if (imagem) {
-            const imagemProcessadaUrl = `http://localhost:8000${imagem.preview_png}`;
+          if (encontrada) {
+            const imagemProcessadaUrl = `http://localhost:8000/output/${encontrada.replace(
+              "_classes.tif",
+              ".png"
+            )}`;
+
+            if (!img.bbox) {
+              console.warn("Imagem sem bbox ao definir imagem processada");
+              return;
+            }
 
             setImagemProcessada({
               id: img.id,
               thumbnail: imagemProcessadaUrl,
-              bbox: imagem.bbox_real ?? imagem.bbox,
+              bbox: img.bbox,
             });
 
             setMostrarProcessada(true);
             setProcessingId(null);
             setTempoEstimado(null);
-            clearInterval(pollingInterval);
+            setTempoEstimadoTotal(null);
+            clearInterval(pollingRef.current!);
             if (intervaloTempoRef.current)
               clearInterval(intervaloTempoRef.current);
           }
         } catch (err) {
           console.error("Erro durante polling de imagem processada:", err);
         }
-      }, 5000);
+      }, 15000);
     } catch (error) {
       console.error("Erro ao iniciar processamento:", error);
       alert("Erro ao processar imagem.");
       setProcessingId(null);
       setTempoEstimado(null);
+      setTempoEstimadoTotal(null);
       if (intervaloTempoRef.current) clearInterval(intervaloTempoRef.current);
     }
   };
@@ -177,7 +203,17 @@ export default function ThumbnailViewer({
     cancelarProcessamentoBackend(id);
     setProcessingId(null);
     setTempoEstimado(null);
-    if (intervaloTempoRef.current) clearInterval(intervaloTempoRef.current);
+    setTempoEstimadoTotal(null);
+
+    if (intervaloTempoRef.current) {
+      clearInterval(intervaloTempoRef.current);
+      intervaloTempoRef.current = null;
+    }
+
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
   };
 
   return (
@@ -208,14 +244,12 @@ export default function ThumbnailViewer({
                 Selecionar
               </SelectButton>
 
-              {isSelected && (
+              {isSelected && !estaProcessando && (
                 <SelectButton
                   onClick={() => handleProcessarImagem(img)}
                   disabled={!!processingId}
                 >
-                  {estaProcessando
-                    ? "Processando... aguarde"
-                    : "Processar Imagem"}
+                  Processar Imagem
                 </SelectButton>
               )}
 
@@ -233,6 +267,11 @@ export default function ThumbnailViewer({
                   {tempoEstimado !== null && (
                     <InfoText>
                       Tempo decorrido: {tempoEstimado.toFixed(1)}s
+                    </InfoText>
+                  )}
+                  {tempoEstimadoTotal !== null && (
+                    <InfoText>
+                      Estimativa total: {tempoEstimadoTotal.toFixed(1)}s
                     </InfoText>
                   )}
                 </>

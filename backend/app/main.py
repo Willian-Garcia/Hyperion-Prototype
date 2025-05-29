@@ -9,11 +9,17 @@ from app.routes.output_routes import router as output_router
 from app.schemas.tb_consulta import create_tables
 from fastapi.middleware.cors import CORSMiddleware
 from app.utils.cancel_manager import CancelManager
+from app.middleware.silent_routes_middleware import SilentRoutesMiddleware
 import logging
 
 cancel_manager = CancelManager()
 
 app = FastAPI(title="Monitoramento de Queimadas")
+
+app.add_middleware(
+    SilentRoutesMiddleware,
+    silent_prefixes=["/status-processamento", "/processed-list"]
+)
 
 # ✅ Configuração do CORS
 app.add_middleware(
