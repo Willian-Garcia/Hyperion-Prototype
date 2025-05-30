@@ -45,6 +45,7 @@ export default function ThumbnailViewer({
   const [tempoEstimadoTotal, setTempoEstimadoTotal] = useState<number | null>(null);
   const intervaloTempoRef = useRef<NodeJS.Timeout | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const progressoRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatarData = (dataISO?: string) => {
     if (!dataISO) return "";
@@ -94,14 +95,18 @@ export default function ThumbnailViewer({
       abortControllerRef.current = new AbortController();
 
       const start = Date.now();
-      intervaloTempoRef.current = setInterval(async () => {
+      intervaloTempoRef.current = setInterval(() => {
         const elapsed = (Date.now() - start) / 1000;
         setTempoEstimado(elapsed);
+      }, 1000);
 
+      progressoRef.current = setInterval(async () => {
         try {
           const progressoRes = await fetch(`http://localhost:8000/status-processamento/${img.id}`);
           const progressoData = await progressoRes.json();
           const progresso = progressoData.progresso;
+
+          const elapsed = (Date.now() - start) / 1000;
 
           if (progresso > 0) {
             const estimadoTotal = elapsed / progresso;
@@ -112,7 +117,7 @@ export default function ThumbnailViewer({
         } catch (err) {
           console.error("Erro ao buscar progresso:", err);
         }
-      }, 1000);
+      }, 15000);
 
       fetch("http://localhost:8000/processar-imagem", {
         method: "POST",
@@ -152,8 +157,8 @@ export default function ThumbnailViewer({
             setTempoEstimado(null);
             setTempoEstimadoTotal(null);
             clearInterval(pollingRef.current!);
-            if (intervaloTempoRef.current)
-              clearInterval(intervaloTempoRef.current);
+            clearInterval(intervaloTempoRef.current!);
+            clearInterval(progressoRef.current!);
           }
         } catch (err) {
           console.error("Erro durante polling de imagem processada:", err);
@@ -165,7 +170,8 @@ export default function ThumbnailViewer({
       setProcessingId(null);
       setTempoEstimado(null);
       setTempoEstimadoTotal(null);
-      if (intervaloTempoRef.current) clearInterval(intervaloTempoRef.current);
+      clearInterval(intervaloTempoRef.current!);
+      clearInterval(progressoRef.current!);
     }
   };
 
@@ -213,6 +219,11 @@ export default function ThumbnailViewer({
     if (pollingRef.current) {
       clearInterval(pollingRef.current);
       pollingRef.current = null;
+    }
+
+    if (progressoRef.current) {
+      clearInterval(progressoRef.current);
+      progressoRef.current = null;
     }
   };
 
