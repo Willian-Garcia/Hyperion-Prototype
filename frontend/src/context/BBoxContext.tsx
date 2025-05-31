@@ -23,8 +23,6 @@ interface BBoxContextType {
 
   processando: boolean;
   setProcessando: React.Dispatch<React.SetStateAction<boolean>>;
-  tempoEstimado: number | null;
-  setTempoEstimado: React.Dispatch<React.SetStateAction<number | null>>;
   cancelarProcesso: boolean;
   setCancelarProcesso: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -39,7 +37,6 @@ export const BBoxProvider = ({ children }: { children: ReactNode }) => {
   const [mostrarProcessada, setMostrarProcessada] = useState(true);
 
   const [processando, setProcessando] = useState(false);
-  const [tempoEstimado, setTempoEstimado] = useState<number | null>(null);
   const [cancelarProcesso, setCancelarProcesso] = useState(false);
 
   const bbox = useMemo(() => {
@@ -65,8 +62,6 @@ export const BBoxProvider = ({ children }: { children: ReactNode }) => {
         setMostrarProcessada,
         processando,
         setProcessando,
-        tempoEstimado,
-        setTempoEstimado,
         cancelarProcesso,
         setCancelarProcesso,
       }}

@@ -16,7 +16,8 @@ class CancelManager:
 
     def is_cancelado(self, imagem_id: str) -> bool:
         """Verifica se o cancelamento foi acionado."""
-        return self._event_map.get(imagem_id, Event()).is_set()
+        evento = self._event_map.get(imagem_id)
+        return evento.is_set() if evento else False
 
     def get_evento(self, imagem_id: str) -> Event:
         """Recupera (ou cria) o Event da imagem."""

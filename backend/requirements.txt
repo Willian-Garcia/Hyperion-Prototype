@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 pystac-client
 rasterio
 numpy
@@ -9,7 +9,7 @@ asyncpg
 alembic
 python-dotenv
 pydantic
-typing
+typing-extensions
 dotenv
 matplotlib
 requests

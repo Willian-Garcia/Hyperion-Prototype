@@ -1,62 +1,54 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+
 from app.routes.api import router as api_router
 from app.routes import stac_routes
-from app.core.database import engine, Base
 from app.routes.usuario_route import router as usuario_router
 from app.routes.ml_routes import router as ml_router
 from app.routes.output_routes import router as output_router
+from app.routes.websocket_endpoint import router as websocket_router
+from app.core.database import engine, Base
 from app.schemas.tb_consulta import create_tables
-from fastapi.middleware.cors import CORSMiddleware
-from app.utils.cancel_manager import CancelManager
 from app.middleware.silent_routes_middleware import SilentRoutesMiddleware
-import logging
-
-cancel_manager = CancelManager()
+from app.utils.cancel_instance import cancel_manager  # ✅ 
 
 app = FastAPI(title="Monitoramento de Queimadas")
 
+# ✅ Middleware para rotas silenciosas (ex: polling)
 app.add_middleware(
     SilentRoutesMiddleware,
     silent_prefixes=["/status-processamento", "/processed-list"]
 )
 
-# ✅ Configuração do CORS
+# ✅ CORS configurado para permitir acesso do frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # ou ["*"] para liberar geral em desenvolvimento
+    allow_origins=["*"],  # Para produção, troque para domínios específicos
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Criação das tabelas no banco de dados durante a inicialização
+# ✅ Tarefas de inicialização (criação do banco e tabelas)
 @app.on_event("startup")
 async def startup_event():
-    logging.info("Iniciando a criação das tabelas...")
-    # Criando as tabelas do banco de dados
+    logging.info("🚀 Iniciando o backend e criando tabelas...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logging.info("Tabelas criadas com sucesso!")
-
-    # Também chama a função para criar as tabelas relacionadas a consultas
     await create_tables()
+    logging.info("✅ Tabelas criadas e serviço pronto!")
 
-# Incluindo as rotas no aplicativo FastAPI
+# ✅ Rotas principais da aplicação
 app.include_router(api_router)
-
-# Rota STAC
 app.include_router(stac_routes.router, prefix="/stac")
-
-# Rota do usuário (API v1)
 app.include_router(usuario_router, prefix="/api/v1")
-
-#Rota para /processar-imagem
 app.include_router(ml_router)
-
-#Rota para /processed-list e /bbox-from-tif
 app.include_router(output_router)
+app.include_router(websocket_router)
 
+# ✅ Servindo arquivos estáticos (como imagens processadas)
 app.mount("/output", StaticFiles(directory="output"), name="output")
 
 __all__ = ["cancel_manager"]

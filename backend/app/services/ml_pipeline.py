@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 import rasterio
+import asyncio
 from rasterio.coords import BoundingBox
 from rasterio.windows import from_bounds
 from PIL import Image, ImageDraw
@@ -11,6 +12,7 @@ from asyncio import Event
 import matplotlib.pyplot as plt
 import logging
 from app.utils.progresso_manager import progresso_manager
+from app.utils.websocket_manager import websocket_manager
 
 COLORS = {
     1: (255, 0, 0, 255),     # Queimada
@@ -39,7 +41,7 @@ def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: Eve
         nir_data = nir.read(1, window=nir_window).astype("float32")
 
         if cancel and cancel.is_set():
-            logging.warning("🛑 Cancelado durante leitura de dados NDVI")
+            print("🛑 Cancelado durante leitura de dados NDVI")
             raise Exception("Processamento cancelado durante NDVI")
 
         print("🧮 Calculando NDVI...")
@@ -67,7 +69,7 @@ def compute_ndvi(red_path, nir_path, output_path, preview_path=None, cancel: Eve
 
 def save_ndvi_preview(ndvi_array, save_path, cancel: Event = None):
     if cancel and cancel.is_set():
-        logging.warning("🛑 Cancelado antes de gerar preview NDVI")
+        print("🛑 Cancelado antes de gerar preview NDVI")
         raise Exception("Cancelado antes de salvar visualização NDVI")
 
     rgb_image = np.zeros((ndvi_array.shape[0], ndvi_array.shape[1], 3), dtype=np.uint8)
@@ -83,7 +85,7 @@ def save_ndvi_preview(ndvi_array, save_path, cancel: Event = None):
     plt.savefig(save_path, dpi=150)
     plt.close()
 
-def run_model(ndvi_path, output_prefix, cancel: Event = None):
+async def run_model(ndvi_path, output_prefix, cancel: Event = None):
     tile_size = 256
     stride = 128
 
@@ -113,13 +115,9 @@ def run_model(ndvi_path, output_prefix, cancel: Event = None):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = get_unet_model(num_classes=4).to(device)
     model_path = "models/final_model_1.pth"
-    print(f"📦 Carregando modelo de: {model_path}")
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Modelo não encontrado em {model_path}")
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
 
-    print("🧹 Calculando número de tiles...")
     total_tiles_x = (w - 1) // stride + 1
     total_tiles_y = (h - 1) // stride + 1
     total_tiles = total_tiles_x * total_tiles_y
@@ -132,15 +130,17 @@ def run_model(ndvi_path, output_prefix, cancel: Event = None):
         for i in range(0, h, stride):
             for j in range(0, w, stride):
                 if cancel and cancel.is_set():
-                    logging.warning("🛑 Cancelado antes do tile")
+                    print("🛑 Cancelado antes do tile")
                     raise Exception("Cancelado antes do tile")
 
                 i_end = min(i + tile_size, h)
                 j_end = min(j + tile_size, w)
 
                 tile_count += 1
-                progresso_manager.set_progresso(output_prefix, tile_count / total_tiles)
-                print(f"🧩 Número Total de Tiles: {tile_count}/{total_tiles} - Processando tile: linha {i}-{i_end}, coluna {j}-{j_end}")
+                progresso = tile_count / total_tiles
+                progresso_manager.set_progresso(output_prefix, progresso)
+                await websocket_manager.send_progress(output_prefix, progresso)
+                print(f"🧩 Processando tile {tile_count}/{total_tiles} - região ({i}:{i_end}, {j}:{j_end})")
 
                 tile = ndvi_array[i:i_end, j:j_end]
                 pad_h = tile_size - tile.shape[0]
@@ -148,32 +148,34 @@ def run_model(ndvi_path, output_prefix, cancel: Event = None):
                 tile_padded = np.pad(tile, ((0, pad_h), (0, pad_w)), mode='constant', constant_values=0)
 
                 if cancel and cancel.is_set():
-                    logging.warning("🛑 Cancelado antes do forward")
+                    print("🛑 Cancelado antes do forward")
                     raise Exception("Cancelado antes do forward")
 
                 tile_tensor = torch.tensor(tile_padded, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
                 output = model(tile_tensor).squeeze(0).cpu().numpy()
 
                 if cancel and cancel.is_set():
-                    logging.warning("🛑 Cancelado após forward")
+                    print("🛑 Cancelado após forward")
                     raise Exception("Cancelado após forward")
 
                 output = output[:, :tile.shape[0], :tile.shape[1]]
                 predicted = np.argmax(output, axis=0).astype(np.uint8)
 
                 if cancel and cancel.is_set():
-                    logging.warning("🛑 Cancelado após argmax")
+                    print("🛑 Cancelado após argmax")
                     raise Exception("Cancelado após argmax")
 
                 predicted_mask[i:i_end, j:j_end] = predicted
 
                 for label, color in COLORS.items():
                     ys, xs = np.where(predicted == label)
-                    for y, x in zip(ys, xs):
+                    for idx, (y, x) in enumerate(zip(ys, xs)):
                         if cancel and cancel.is_set():
-                            logging.warning("🛑 Cancelado durante desenho dos pixels")
+                            print("🛑 Cancelado durante desenho")
                             raise Exception("Cancelado durante desenho")
                         draw.point((j + x, i + y), fill=color)
+                        if idx % 5000 == 0:
+                            await asyncio.sleep(0)
 
     print(f"📀 Salvando classes em {output_tif}")
     profile.pop("nodata", None)
@@ -184,7 +186,6 @@ def run_model(ndvi_path, output_prefix, cancel: Event = None):
     print(f"📀 Salvando preview transparente em {output_png}")
     rgba_image.save(output_png)
 
-    print("✅ Tudo pronto.")
     return output_tif, output_png
 
 async def processar_imagem_completa(data, cancel: Event):
@@ -198,18 +199,21 @@ async def processar_imagem_completa(data, cancel: Event):
     ndvi_preview = f"data/processed/{data.id}_ndvi_preview.png"
 
     if cancel.is_set():
+        print("🛑 Cancelado antes de iniciar downloads")
         raise Exception("Processamento cancelado antes de iniciar downloads")
 
     baixar_arquivo(data.band15_url, red_path, cancel)
     if cancel.is_set():
+        print("🛑 Cancelado após download BAND15")
         raise Exception("Cancelado após download BAND15")
 
     baixar_arquivo(data.band16_url, nir_path, cancel)
     if cancel.is_set():
+        print("🛑 Cancelado após download BAND16")
         raise Exception("Cancelado após download BAND16")
 
     compute_ndvi(red_path, nir_path, ndvi_tif, ndvi_preview, cancel)
-    tif_final, png_final = run_model(ndvi_tif, data.id, cancel)
+    tif_final, png_final = await run_model(ndvi_tif, data.id, cancel)
 
     with rasterio.open(tif_final) as src:
         bounds = src.bounds
@@ -224,34 +228,3 @@ async def processar_imagem_completa(data, cancel: Event):
         "bbox": data.bbox,
         "bbox_real": real_bbox
     }
-
-#Este novo arquivo substitui e funde os seguintes arquivos do primeiro repositório:
-
-#Arquivo original 
-# backend/app/compute_ndvi.py 
-#   Incorporado
-#   A função compute_ndvi foi migrada e refatorada
-
-#Arquivo original 
-# backend/app/run_model.py
-#   Incorporado
-#   Toda a lógica do U-Net e draw foi fundida
-
-#Arquivo original 
-# backend/app/image_machine_learning.py 
-#   Fundido
-#   A versão mais robusta com tiles sobrepostos foi usada parcialmente
-
-#Arquivo original 
-# app/model.py
-#   Referenciado
-#   Continua sendo importado para carregar o modelo U-Net
-
-#Arquivo original 
-# utils/download_utils.py (v1)
-#   Substuido
-#   Agora usamos a versão mais completa do segundo repositório
-
-
-
- 

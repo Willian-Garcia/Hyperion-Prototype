@@ -1,5 +1,5 @@
 import { useBBox } from "../../context/BBoxContext";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Panel,
   Title,
@@ -27,10 +27,15 @@ interface ThumbnailViewerProps {
   onClose: () => void;
 }
 
-export default function ThumbnailViewer({
-  imagens,
-  onClose,
-}: ThumbnailViewerProps) {
+// Função para formatar segundos em hh:mm:ss
+function formatarTempo(segundos: number): string {
+  const h = Math.floor(segundos / 3600);
+  const m = Math.floor((segundos % 3600) / 60);
+  const s = Math.floor(segundos % 60);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+export default function ThumbnailViewer({ imagens, onClose }: ThumbnailViewerProps) {
   const {
     imagemThumbnail,
     setImagemThumbnail,
@@ -40,12 +45,22 @@ export default function ThumbnailViewer({
   } = useBBox();
 
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null);
   const [tempoEstimado, setTempoEstimado] = useState<number | null>(null);
   const [tempoEstimadoTotal, setTempoEstimadoTotal] = useState<number | null>(null);
+  const [cancelando, setCancelando] = useState(false);
+
   const intervaloTempoRef = useRef<NodeJS.Timeout | null>(null);
   const pollingRef = useRef<NodeJS.Timeout | null>(null);
-  const progressoRef = useRef<NodeJS.Timeout | null>(null);
+  const socketRef = useRef<WebSocket | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      clearInterval(intervaloTempoRef.current!);
+      clearInterval(pollingRef.current!);
+      socketRef.current?.close();
+    };
+  }, []);
 
   const formatarData = (dataISO?: string) => {
     if (!dataISO) return "";
@@ -53,29 +68,16 @@ export default function ThumbnailViewer({
     return `${dia}/${mes}/${ano}`;
   };
 
-  const handleSelecionarImagem = (img: {
-    id: string;
-    thumbnail: string;
-    bbox?: number[];
-  }) => {
+  const handleSelecionarImagem = (img: any) => {
     if (img.bbox) {
-      setImagemThumbnail({
-        id: img.id,
-        thumbnail: img.thumbnail,
-        bbox: img.bbox,
-      });
+      setImagemThumbnail({ id: img.id, thumbnail: img.thumbnail, bbox: img.bbox });
       setMostrarThumbnail(true);
     } else {
       alert("Imagem sem BBOX disponível para visualização.");
     }
   };
 
-  const handleProcessarImagem = async (img: {
-    id: string;
-    thumbnail: string;
-    bbox?: number[];
-    bandas?: { [key: string]: string };
-  }) => {
+  const handleProcessarImagem = async (img: any) => {
     if (processingId) return;
 
     if (!img.bbox || !img.bandas?.BAND15 || !img.bandas?.BAND16) {
@@ -92,148 +94,97 @@ export default function ThumbnailViewer({
 
     try {
       setProcessingId(img.id);
-      abortControllerRef.current = new AbortController();
-
+      setCancelando(false);
       const start = Date.now();
+
       intervaloTempoRef.current = setInterval(() => {
         const elapsed = (Date.now() - start) / 1000;
         setTempoEstimado(elapsed);
       }, 1000);
 
-      progressoRef.current = setInterval(async () => {
-        try {
-          const progressoRes = await fetch(`http://localhost:8000/status-processamento/${img.id}`);
-          const progressoData = await progressoRes.json();
-          const progresso = progressoData.progresso;
+      abortRef.current = new AbortController();
 
+      socketRef.current = new WebSocket(`ws://localhost:8000/ws/${img.id}`);
+      socketRef.current.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const progresso = Number(data.progresso);
           const elapsed = (Date.now() - start) / 1000;
 
-          if (progresso > 0) {
+          if (!isNaN(progresso) && progresso > 0.01 && progresso <= 1) {
             const estimadoTotal = elapsed / progresso;
-            setTempoEstimadoTotal(estimadoTotal);
-          } else {
-            setTempoEstimadoTotal(null);
+            if (isFinite(estimadoTotal)) {
+              setTempoEstimadoTotal(Number(estimadoTotal.toFixed(1)));
+            }
           }
-        } catch (err) {
-          console.error("Erro ao buscar progresso:", err);
-        }
-      }, 15000);
 
-      fetch("http://localhost:8000/processar-imagem", {
+          setTempoEstimado(elapsed);
+        } catch (err) {
+          console.error("Erro ao processar mensagem do WebSocket:", err);
+        }
+      };
+
+      socketRef.current.onerror = (e) => console.error("WebSocket erro:", e);
+      socketRef.current.onclose = () => console.log("WebSocket fechado.");
+
+      await fetch("http://localhost:8000/processar-imagem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-        signal: abortControllerRef.current.signal,
+        signal: abortRef.current.signal,
       });
 
       pollingRef.current = setInterval(async () => {
         try {
           const res = await fetch("http://localhost:8000/processed-list/");
           if (!res.ok) return;
-
           const data = await res.json();
-          const arquivos: string[] = data.arquivos;
-          const encontrada = arquivos.find((nome) => nome.includes(img.id));
-
+          const encontrada = data.find((item: any) => item.id.includes(img.id));
           if (encontrada) {
-            const imagemProcessadaUrl = `http://localhost:8000/output/${encontrada.replace(
-              "_classes.tif",
-              ".png"
-            )}`;
-
-            if (!img.bbox) {
-              console.warn("Imagem sem bbox ao definir imagem processada");
-              return;
-            }
-
-            setImagemProcessada({
-              id: img.id,
-              thumbnail: imagemProcessadaUrl,
-              bbox: img.bbox,
-            });
-
+            const imagemProcessadaUrl = `http://localhost:8000${encontrada.preview_png}`;
+            setImagemProcessada({ id: img.id, thumbnail: imagemProcessadaUrl, bbox: img.bbox });
             setMostrarProcessada(true);
-            setProcessingId(null);
-            setTempoEstimado(null);
-            setTempoEstimadoTotal(null);
-            clearInterval(pollingRef.current!);
-            clearInterval(intervaloTempoRef.current!);
-            clearInterval(progressoRef.current!);
+            cancelarAmbos(img.id, false);
           }
         } catch (err) {
-          console.error("Erro durante polling de imagem processada:", err);
+          console.error("Erro no polling:", err);
         }
       }, 15000);
-    } catch (error) {
-      console.error("Erro ao iniciar processamento:", error);
-      alert("Erro ao processar imagem.");
-      setProcessingId(null);
-      setTempoEstimado(null);
-      setTempoEstimadoTotal(null);
-      clearInterval(intervaloTempoRef.current!);
-      clearInterval(progressoRef.current!);
-    }
-  };
-
-  const cancelarProcessamentoFrontend = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-  };
-
-  const cancelarProcessamentoBackend = async (id: string) => {
-    try {
-      console.log("📡 Enviando POST para /cancelar-processamento?id=" + id);
-
-      const res = await fetch(
-        `http://localhost:8000/cancelar-processamento?id=${id}`,
-        {
-          method: "POST",
-        }
-      );
-
-      if (!res.ok) {
-        const msg = await res.text();
-        console.warn("⚠️ Backend retornou erro:", msg);
-        throw new Error("Falha ao cancelar no backend");
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        console.log("⛔ Cancelado localmente pelo usuário.");
+      } else {
+        console.error("Erro ao iniciar processamento:", err);
       }
-
-      console.log("✅ Backend confirmou o cancelamento.");
-    } catch (err) {
-      console.error("❌ Erro ao cancelar no backend:", err);
+      cancelarAmbos(img.id);
     }
   };
 
-  const cancelarAmbos = (id: string) => {
-    cancelarProcessamentoFrontend();
-    cancelarProcessamentoBackend(id);
+  const cancelarAmbos = (id: string, cancelarBackend: boolean = true) => {
+    setCancelando(true);
+
+    if (cancelarBackend) {
+      fetch(`http://localhost:8000/cancelar-processamento?id=${id}`, { method: "POST" })
+        .then(() => console.log("✅ Cancelamento backend enviado"))
+        .catch((e) => console.error("❌ Erro cancelando backend:", e));
+    }
+
+    abortRef.current?.abort();
     setProcessingId(null);
     setTempoEstimado(null);
     setTempoEstimadoTotal(null);
-
-    if (intervaloTempoRef.current) {
-      clearInterval(intervaloTempoRef.current);
-      intervaloTempoRef.current = null;
-    }
-
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-
-    if (progressoRef.current) {
-      clearInterval(progressoRef.current);
-      progressoRef.current = null;
-    }
+    clearInterval(intervaloTempoRef.current!);
+    clearInterval(pollingRef.current!);
+    socketRef.current?.close();
+    socketRef.current = null;
+    setCancelando(false);
   };
 
   return (
     <Panel>
       <ScrollContainer>
         <Title>Resultados da Busca</Title>
-        <ImageCountText>
-          {imagens.length} imagens foram encontradas
-        </ImageCountText>
+        <ImageCountText>{imagens.length} imagens foram encontradas</ImageCountText>
         {imagens.map((img) => {
           const isSelected = imagemThumbnail?.id === img.id;
           const estaProcessando = processingId === img.id;
@@ -241,49 +192,37 @@ export default function ThumbnailViewer({
           return (
             <ThumbnailCard key={img.id} selected={isSelected}>
               <ThumbnailImage src={img.thumbnail} alt={img.id} />
-              <InfoText>
-                <strong>Id:</strong> {img.id}
-              </InfoText>
-              <InfoText>
-                <strong>BBox:</strong> {img.bbox?.join(", ")}
-              </InfoText>
-              <InfoText>
-                <strong>Data:</strong> {formatarData(img.data)}
-              </InfoText>
-
-              <SelectButton onClick={() => handleSelecionarImagem(img)}>
-                Selecionar
-              </SelectButton>
-
+              <InfoText><strong>Id:</strong> {img.id}</InfoText>
+              <InfoText><strong>BBox:</strong> {img.bbox?.join(", ")}</InfoText>
+              <InfoText><strong>Data:</strong> {formatarData(img.data)}</InfoText>
+              <SelectButton onClick={() => handleSelecionarImagem(img)}>Selecionar</SelectButton>
               {isSelected && !estaProcessando && (
-                <SelectButton
-                  onClick={() => handleProcessarImagem(img)}
-                  disabled={!!processingId}
-                >
+                <SelectButton onClick={() => handleProcessarImagem(img)} disabled={!!processingId}>
                   Processar Imagem
                 </SelectButton>
               )}
-
               {estaProcessando && (
                 <>
-                  <SelectButton
-                    onClick={() => {
-                      console.log("🛑 Enviando cancelamento... ID:", img.id);
-                      cancelarAmbos(img.id);
-                    }}
-                    disabled={!processingId}
-                  >
-                    Cancelar Processamento
+                  <SelectButton onClick={() => cancelarAmbos(img.id)} disabled={!processingId || cancelando}>
+                    {cancelando ? "Cancelando..." : "Cancelar Processamento"}
                   </SelectButton>
                   {tempoEstimado !== null && (
                     <InfoText>
-                      Tempo decorrido: {tempoEstimado.toFixed(1)}s
+                      Tempo decorrido: {formatarTempo(tempoEstimado)}
                     </InfoText>
                   )}
                   {tempoEstimadoTotal !== null && (
-                    <InfoText>
-                      Estimativa total: {tempoEstimadoTotal.toFixed(1)}s
-                    </InfoText>
+                    <>
+                      <InfoText>
+                        Estimativa total: {formatarTempo(tempoEstimadoTotal)}
+                      </InfoText>
+                      <InfoText>
+                        Tempo restante: {formatarTempo(tempoEstimadoTotal - tempoEstimado!)}
+                      </InfoText>
+                      <InfoText>
+                        Progresso: {((tempoEstimado! / tempoEstimadoTotal) * 100).toFixed(1)}%
+                      </InfoText>
+                    </>
                   )}
                 </>
               )}

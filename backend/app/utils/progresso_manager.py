@@ -19,5 +19,10 @@ class ProgressoManager:
             if id in self._dados:
                 del self._dados[id]
 
+    def limpar(self, id: str):
+        with self._lock:
+            if id in self._dados:
+                del self._dados[id]
+
 # Instância global para ser usada em todo o app
 progresso_manager = ProgressoManager()
